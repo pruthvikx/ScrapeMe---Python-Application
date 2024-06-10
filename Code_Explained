@@ -1,0 +1,293 @@
+A detail explaination about the code is given below,
+
+1. Imports
+
+Code:
+
+import requests
+from bs4 import BeautifulSoup
+from googlesearch import search
+from docx import Document
+import sublist3r
+import socket
+from vulners import Vulners
+
+Explaination:
+
+requests: A library for making HTTP requests.
+BeautifulSoup: A library for parsing HTML and XML documents.
+search: A function from the googlesearch library to perform Google searches.
+Document: A class from the python-docx library to create and manage Word documents.
+sublist3r: A tool for enumerating subdomains.
+socket: A library for low-level networking interfaces.
+Vulners: A library for interacting with the Vulners vulnerability database API.
+
+2. Google Search Function
+
+Code:
+
+def google_search(query, num_results):
+    try:
+        return list(search(query, stop=num_results, pause=2))
+    except Exception as e:
+        print(f"An error occurred while searching: {e}")
+        return []
+
+Explaination:
+
+google_search: A function that takes a query string and the number of results to return.
+try-except: Handles exceptions that might occur during the search.
+search: Performs the Google search.
+list: Converts the generator returned by search into a list.
+pause=2: Adds a 2-second pause between requests to avoid being blocked by Google.
+
+3. Subdomain Gathering Function
+   
+Code:
+
+def get_subdomains(domain):
+    subdomains = sublist3r.main(domain, 40, savefile=None, ports=None, silent=True, verbose=False, enable_bruteforce=False, engines=None)
+    return subdomains
+
+Explaination:
+
+get_subdomains: A function that takes a domain and returns its subdomains.
+sublist3r.main: Calls the main function of the Sublist3r library to enumerate subdomains.
+Parameters:
+domain: The target domain.
+40: The number of threads.
+savefile=None: No file output.
+ports=None: No port scanning.
+silent=True: No output to the console.
+verbose=False: No detailed output.
+enable_bruteforce=False: No brute-force attack.
+engines=None: Use all available engines.
+
+4. Port Scanning Function
+
+Code:
+
+def port_scan(domain):
+    common_ports = [21, 22, 23, 25, 53, 80, 110, 143, 443, 3389]
+    open_ports = []
+    for port in common_ports:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        socket.setdefaulttimeout(1)
+        result = sock.connect_ex((domain, port))
+        if result == 0:
+            open_ports.append(port)
+        sock.close()
+    return open_ports
+
+Explaination:
+
+port_scan: A function that takes a domain and returns a list of open common ports.
+common_ports: A list of common ports to scan.
+open_ports: A list to store open ports.
+socket.socket: Creates a new socket.
+socket.AF_INET: Specifies the address family (IPv4).
+socket.SOCK_STREAM: Specifies the socket type (TCP).
+socket.setdefaulttimeout(1): Sets a timeout of 1 second.
+sock.connect_ex: Attempts to connect to the port.
+result == 0: Indicates that the port is open.
+sock.close(): Closes the socket.
+
+5. Technical Information Gathering Function
+
+Code:
+
+def get_technical_info(url):
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        title = soup.title.string if soup.title else 'No title'
+        headers = response.headers
+        return {'title': title, 'headers': headers}
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to retrieve {url}: {e}")
+        return None
+
+Explaination:
+
+get_technical_info: A function that takes a URL and returns its technical information.
+requests.get: Sends an HTTP GET request.
+response.raise_for_status(): Raises an exception for HTTP errors.
+BeautifulSoup: Parses the HTML content.
+soup.title.string: Gets the page title.
+response.headers: Gets the response headers.
+return: Returns a dictionary with the title and headers.
+except: Catches and prints exceptions.
+
+6. Vulnerability Assessment Function
+
+Code:
+
+def vulnerability_assessment(technical_info):
+    vulners_api = Vulners(api_key='YOUR_VULNERS_API_KEY')
+    headers = technical_info.get('headers', {})
+    vulnerabilities = []
+
+    # Simple check against server header
+    server = headers.get('Server', None)
+    if server:
+        try:
+            vulns = vulners_api.find_all(f'software:"{server}"')
+            for vuln in vulns:
+                vulnerabilities.append(vuln.get('description', 'No description available'))
+        except Exception as e:
+            print(f"Failed to search vulnerabilities: {e}")
+
+    return vulnerabilities
+
+Explaination:
+
+vulnerability_assessment: A function that takes technical information and returns a list of vulnerabilities.
+Vulners(api_key='YOUR_VULNERS_API_KEY'): Initializes the Vulners API client.
+headers.get('Server', None): Gets the Server header.
+if server: Checks if the Server header exists.
+vulners_api.find_all: Searches for vulnerabilities related to the server software.
+vuln.get('description', 'No description available'): Gets the vulnerability description.
+except: Catches and prints exceptions.
+
+7. Save Results to Document Function
+
+code:
+
+def save_to_document(results, filename):
+    doc = Document()
+    for result in results:
+        doc.add_heading(result['url'], level=1)
+        doc.add_heading(result['data']['title'], level=2)
+        for paragraph in result['data']['paragraphs']:
+            doc.add_paragraph(paragraph)
+        doc.add_heading("Subdomains", level=3)
+        for subdomain in result['subdomains']:
+            doc.add_paragraph(subdomain)
+        doc.add_heading("Open Ports", level=3)
+        for port in result['open_ports']:
+            doc.add_paragraph(str(port))
+        doc.add_heading("Technical Information", level=3)
+        for key, value in result['technical_info'].items():
+            doc.add_paragraph(f"{key}: {value}")
+        doc.add_heading("Vulnerabilities", level=3)
+        for vuln in result['vulnerabilities']:
+            doc.add_paragraph(vuln)
+    doc.save(filename)
+
+Explaination:
+
+save_to_document: A function that takes results and a filename, and saves the results to a Word document.
+Document(): Creates a new Word document.
+doc.add_heading: Adds a heading to the document.
+doc.add_paragraph: Adds a paragraph to the document.
+for result in results: Iterates through the results.
+result['url']: The URL of the result.
+result['data']['title']: The title of the page.
+result['data']['paragraphs']: The paragraphs of the page.
+result['subdomains']: The subdomains of the domain.
+result['open_ports']: The open ports of the domain.
+result['technical_info']: The technical information of the page.
+result['vulnerabilities']: The vulnerabilities of the page.
+doc.save(filename): Saves the document.
+
+8. Main Function
+
+Code:
+
+def main(query, num_results, output_filename):
+    urls = google_search(query, num_results)
+    results = []
+    for url in urls:
+        domain = url.split("//")[-1].split("/")[0]
+        subdomains = get_subdomains(domain)
+        open_ports = port_scan(domain)
+        technical_info = get_technical_info(url)
+        vulnerabilities = vulnerability_assessment(technical_info) if technical_info else []
+        data = extract_data(scrape_url(url))
+        results.append({
+            'url': url,
+            'data': data,
+            'subdomains': subdomains,
+            'open_ports': open_ports,
+            'technical_info': technical_info,
+            'vulnerabilities': vulnerabilities
+        })
+    save_to_document(results, output_filename)
+
+EXplain:
+
+main: The main function of the script.
+google_search: Performs a Google search with the query and number of results.
+results: An empty list to store the results.
+for url in urls: Iterates through the URLs.
+domain = url.split("//")[-1].split("/")[0]: Extracts the domain from the URL.
+get_subdomains(domain): Gets the subdomains of the domain.
+port_scan(domain): Performs a port scan on the domain.
+get_technical_info(url): Gets the technical information of the URL.
+vulnerability_assessment(technical_info): Performs a vulnerability assessment.
+scrape_url(url): Scrapes the URL.
+extract_data(soup): Extracts data from the scraped content.
+results.append: Adds the result to the list.
+save_to_document(results, output_filename): Saves the results to a document.
+
+9. URL Scraping Function
+
+Code:
+
+def scrape_url(url):
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        return soup
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to retrieve {url}: {e}")
+        return None
+
+Explained:
+
+scrape_url: A function that takes a URL and returns a BeautifulSoup object.
+requests.get: Sends an HTTP GET request.
+response.raise_for_status(): Raises an exception for HTTP errors.
+BeautifulSoup: Parses the HTML content.
+return soup: Returns the BeautifulSoup object.
+except: Catches and prints exceptions.
+
+10. Data Extraction Function
+
+code:
+
+def extract_data(soup):
+    data = {}
+    title = soup.title.string if soup.title else 'No title'
+    data['title'] = title
+    paragraphs = [p.get_text() for p in soup.find_all('p')]
+    data['paragraphs'] = paragraphs
+    return data
+
+Explain:
+
+extract_data: A function that takes a BeautifulSoup object and returns extracted data.
+data = {}: Initializes an empty dictionary.
+soup.title.string: Gets the page title.
+paragraphs = [p.get_text() for p in soup.find_all('p')]: Gets all paragraphs.
+return data: Returns the extracted data.
+
+11. Script Entry Point
+
+Code:
+
+if __name__ == "__main__":
+    query = "https://geekforgeeks.org"
+    num_results = 5
+    output_filename = "gfg.docx"
+    main(query, num_results, output_filename)
+
+Explained:
+
+if name == "main": Ensures the script runs only when executed directly.
+query: The Google search query.
+num_results: The number of search results.
+output_filename: The name of the output document.
+main(query, num_results, output_filename): Calls the main function with the specified parameters.
